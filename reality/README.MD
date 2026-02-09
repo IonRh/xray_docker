@@ -46,6 +46,9 @@ services:
 部署后，手动补上SHORT_IDS，到对应的客户段的位置，比如，填入 `a93c`
 
 
+
+
+
 ## docker一键命令
 ```
 docker run -d \
@@ -85,28 +88,3 @@ docker run -d \
 请确保在使用前已正确安装和配置 XRay 客户端。
 为了保证安全和稳定，请勿将 UUID、私钥等敏感信息泄露给他人。
 启用 sni-filter 时默认只放行 SERVERNAMES 的第一个域名。
-
-## 捐赠
-
-您可以使用我的 搬瓦工 AFF 购买 VPS
-
-https://bandwagonhost.com/aff.php?aff=63939
-
-您可以使用我的 JustMySocks AFF 购买搬瓦工提供的代理
-
-https://justmysocks.net/members/aff.php?aff=17621
-
-您可以使用我的 DMIT AFF 购买 VPS
-
-https://www.dmit.io/aff.php?aff=3957
-
-您可以使用我的 Vultr AFF 创建新的 Vultr 账号并使用
-
-https://www.vultr.com/?ref=6881279
-
-您可以使用我的 nube AFF 购买按量付费VPS
-
-https://nube.sh/invite/5986088028ENM0
-
-您可以通过 USDT 支持我，感谢您的支持
-TRC20: TU8mLTPfa5Y9nmszyfyt2VRAtuZhdLexL8

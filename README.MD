@@ -1,7 +1,7 @@
 ## xray_docker_reality
 xray reality docker 镜像
 
-[![xray_docker_reality_docker_image_build](https://github.com/wulabing/xray_docker/actions/workflows/xray_docker_reality.yml/badge.svg)](https://github.com/wulabing/xray_docker/actions/workflows/xray_docker_reality.yml)
+原版：https://github.com/wulabing/xray_docker/
 
 > 新的命令中添加了日志大小的限制，可以调整 max-size=100m 的数量来调整日志的最大大小，需要限制日志大小的用户请重新创建容器
 

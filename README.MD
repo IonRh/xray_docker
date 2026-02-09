@@ -30,8 +30,8 @@ services:
       - "8443:443"
 
     environment:
-      SERVERNAMES: "www.microsoft.com images.microsoft.com"
-      DEST: "www.microsoft.com:443"
+      SERVERNAMES: "images.microsoft.com"
+      DEST: "images.microsoft.com:443"
       EXTERNAL_PORT: "8443"
       UUID: "54375107-f7eb-4786-ad4c-a746dd6d293c"
       SNI_FILTER: "true"
@@ -60,8 +60,8 @@ docker run -d \
   -p $EXTERNAL_PORT:443 \
   -e EXTERNAL_PORT=8443 \
   -e UUID="54375107-f7eb-4786-ad4c-a746dd6d293c" \
-  -e SERVERNAMES="www.microsoft.com images.microsoft.com" \
-  -e DEST="www.microsoft.com:443" \
+  -e SERVERNAMES="images.microsoft.com" \
+  -e DEST="images.microsoft.com:443" \
   -e SNI_FILTER="true" \
   -e SHORT_IDS="6e a93c f1" \
   -v "/root/reality:/data" \

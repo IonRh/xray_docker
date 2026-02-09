@@ -9,91 +9,60 @@ xray reality docker 镜像
 
 > 本 xray_docker_reality 仓库会每两天在 UTC+8 04:00 自动构建镜像
 
-## 懒人一键安装（docker已经准备好）
+## docker-compose.yml
 ```
-EXTERNAL_PORT=2333 && docker run -d --name xray_reality --restart=always --log-opt max-size=100m --log-opt max-file=3 -p $EXTERNAL_PORT:443 -e EXTERNAL_PORT=$EXTERNAL_PORT wulabing/xray_docker_reality:latest && sleep 3 && docker exec -it xray_reality cat /config_info.txt
-```
+version: "3.8"
 
-## 基础使用方法
+services:
+  xray-reality:
+    image: kwxos/xray_docker_reality:latest
+    container_name: xray_reality
+    restart: always
 
-如果你没有安装 docker 请先安装 docker
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
 
-```
-curl -fsSL get.docker.com -o get-docker.sh && sh get-docker.sh
-```
-### 端口映射模式
-如果你已经安装 docker，可以直接使用下面的命令，运行后会自动下载镜像并启动容器，
-EXTERNAL_PORT 为你想要使用的端口，如下所示，你将使用443端口
+    ports:
+      - "8443:443"
 
-```
-docker pull wulabing/xray_docker_reality:latest
-EXTERNAL_PORT=443
-docker run -d --name xray_reality --restart=always --log-opt max-size=100m --log-opt max-file=3 -p $EXTERNAL_PORT:443 -e EXTERNAL_PORT=$EXTERNAL_PORT wulabing/xray_docker_reality:latest
-```
+    environment:
+      SERVERNAMES: "www.microsoft.com images.microsoft.com"
+      DEST: "www.microsoft.com:443"
+      EXTERNAL_PORT: "8443"
+      UUID: "54375107-f7eb-4786-ad4c-a746dd6d293c"
+      SNI_FILTER: "true"
+      SHORT_IDS: "6e a93c f1"
 
-### host 模式
-如果你想使用 host 模式，你可以使用以下命令，运行后会自动下载镜像并启动容器，
-HOSTMODE_PORT 为你想要使用的端口，如下所示，你将使用443端口
->请注意，如果你使用 host 模式，EXTERNAL_PORT 变量将不会生效，请使用 HOSTMODE_PORT 变量
+    volumes:
+      - /root/reality:/data
 
-```
-docker pull wulabing/xray_docker_reality:latest
-HOSTMODE_PORT=443
-docker run -d --name xray_reality --restart=always --log-opt max-size=100m --log-opt max-file=3 --network host -e HOSTMODE_PORT=$HOSTMODE_PORT wulabing/xray_docker_reality:latest
-```
-
-## 持久化配置（推荐）
-使用宿主机目录保存 UUID/私钥/订阅信息，镜像更新后连接信息保持不变：
-
-```
-docker pull wulabing/xray_docker_reality:latest
-EXTERNAL_PORT=443
-docker run -d --name xray_reality --restart=always --log-opt max-size=100m --log-opt max-file=3 -p $EXTERNAL_PORT:443 -e EXTERNAL_PORT=$EXTERNAL_PORT -v "./wulabing_xray_config:/data" wulabing/xray_docker_reality:latest
+    network_mode: bridge
 ```
 
-如果你之前保存过旧版的 config_info.txt，可放到 `./wulabing_xray_config/config_info.txt` 或 `./wulabing_xray_config/reality_config_info.txt`，启动时会自动兼容读取。
+
+部署后，手动补上SHORT_IDS，到对应的客户段的位置，比如，填入 `a93c`
 
 
-查看日志获取配置信息，如下所示，按照提示配置客户端即可，
-
+## docker一键命令
 ```
-docker logs -f xray_reality 
+docker run -d \
+  --name xray_reality \
+  --restart=always \
+  --log-opt max-size=100m \
+  --log-opt max-file=3 \
+  -p $EXTERNAL_PORT:443 \
+  -e EXTERNAL_PORT=8443 \
+  -e UUID="54375107-f7eb-4786-ad4c-a746dd6d293c" \
+  -e SERVERNAMES="www.microsoft.com images.microsoft.com" \
+  -e DEST="www.microsoft.com:443" \
+  -e SNI_FILTER="true" \
+  -e SHORT_IDS="6e a93c f1" \
+  -v "/root/reality:/data" \
+  wulabing/xray_docker_reality:latest
 ```
-
-## 进阶使用方法
-如果你不想使用 443 端口，你可以自定义端口，例如使用 8443 端口，如下所示
-
-```
-EXTERNAL_PORT=8443
-docker run -d --name xray_reality --restart=always --log-opt max-size=100m --log-opt max-file=3 -p $EXTERNAL_PORT:443 -e EXTERNAL_PORT=$EXTERNAL_PORT wulabing/xray_docker_reality:latest
-```
-
-如果你想启动多个 reality 服务，你可以使用不同的容器名，并注意端口不要冲突，如下所示你将启动两个 reality 服务，分别使用444和445端口
-
-```
-EXTERNAL_PORT=444
-docker run -d --name xray_reality_1 --restart=always --log-opt max-size=100m --log-opt max-file=3 -p $EXTERNAL_PORT:443 -e EXTERNAL_PORT=$EXTERNAL_PORT wulabing/xray_docker_reality:latest
-
-EXTERNAL_PORT=445
-docker run -d --name xray_reality_2 --restart=always --log-opt max-size=100m --log-opt max-file=3 -p $EXTERNAL_PORT:443 -e EXTERNAL_PORT=$EXTERNAL_PORT wulabing/xray_docker_reality:latest
-```
-
-如果你不想使用默认参数，你可以自定义参数，例如使用自定义的 UUID,以及自定义目标地址和服务器名称，如下所示，**支持的自定义参数请参考下方环境变量说明**
-
-存在多个 SERVERNAMES 时使用空格分开，例如：www.apple.com images.apple.com
-
-请注意，如果你使用自定义参数，你需要自己保证参数的正确性，否则可能会导致容器无法启动
-```
-EXTERNAL_PORT=443
-docker run -d --name xray_reality --restart=always --log-opt max-size=100m --log-opt max-file=3 -p $EXTERNAL_PORT:443 -e EXTERNAL_PORT=$EXTERNAL_PORT -e UUID="XXX" -e SERVERNAMES="www.apple.com images.apple.com" -e DEST="www.apple.com:443" -e PRIVATEKEY="XXX" wulabing/xray_docker_reality:latest
-```
-
-使用以下命令删除已经创建的容器，如下所示，需要将 xray_reality 替换为你自己的容器名 (--name 所设置的名称)
-
-```
-docker rm -f xray_reality
-```
-
 
 ## 环境变量
 你可以设置以下环境变量来自定义 XRay 的配置。

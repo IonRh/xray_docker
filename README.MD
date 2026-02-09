@@ -1,7 +1,8 @@
 ## xray_docker_reality
-xray reality docker 镜像
+xray reality docker 镜像 加入SHORT_IDS与SNI_FILTER，防偷流量
 
 原版：https://github.com/wulabing/xray_docker/
+参考：https://github.com/oldfriendme/xrayREALITY
 
 > 新的命令中添加了日志大小的限制，可以调整 max-size=100m 的数量来调整日志的最大大小，需要限制日志大小的用户请重新创建容器
 

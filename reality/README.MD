@@ -100,8 +100,11 @@ docker rm -f xray_reality
 * UUID：XRay 的唯一用户标识符。若未设置，脚本将自动生成一个随机 UUID。
 * DEST：目标地址。默认值为 www.apple.com:443。
 * SERVERNAMES：服务器名称列表。默认值为 www.apple.com images.apple.com。
+* SHORT_IDS：Reality shortIds 列表，空格分隔。默认自动生成。
 * PRIVATEKEY：私钥。若未设置，脚本将自动生成一个新的私钥和对应的公钥。
 * NETWORK：网络类型。默认值为 tcp。
+* SNI_FILTER：是否启用 sni-filter，默认 true。
+* SNI_FILTER_BACKEND_PORT：sni-filter 转发的内部端口，默认 65433。
 * CONFIG_DIR：持久化目录。默认值为 /data。
 
 ## 常量
@@ -112,6 +115,7 @@ docker rm -f xray_reality
 ## 注意事项
 请确保在使用前已正确安装和配置 XRay 客户端。
 为了保证安全和稳定，请勿将 UUID、私钥等敏感信息泄露给他人。
+启用 sni-filter 时默认只放行 SERVERNAMES 的第一个域名。
 
 ## 捐赠
 

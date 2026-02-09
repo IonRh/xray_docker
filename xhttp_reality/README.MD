@@ -96,6 +96,7 @@ docker rm -f xray_xhttp_reality
 * UUID：XRay 的唯一用户标识符。若未设置，脚本将自动生成一个随机 UUID。
 * DEST：目标地址。默认值为 www.apple.com:443。
 * SERVERNAMES：服务器名称列表。默认值为 www.apple.com images.apple.com。
+* SHORT_IDS：Reality shortIds 列表，空格分隔。默认自动生成。
 * PRIVATEKEY：私钥。若未设置，脚本将自动生成一个新的私钥和对应的公钥。
 * NETWORK：网络类型。默认值为 xhttp，不要进行修改。
 * CONFIG_DIR：持久化目录。默认值为 /data。

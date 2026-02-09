@@ -2,6 +2,8 @@
 CONFIG_DIR="${CONFIG_DIR:-/data}"
 STATE_FILE="$CONFIG_DIR/reality_state.json"
 INFO_FILE="$CONFIG_DIR/reality_config_info.txt"
+SNI_FILTER="${SNI_FILTER:-true}"
+SNI_FILTER_BACKEND_PORT="${SNI_FILTER_BACKEND_PORT:-65433}"
 
 mkdir -p "$CONFIG_DIR"
 
@@ -12,6 +14,7 @@ STATE_DEST=""
 STATE_SERVERNAMES=""
 STATE_NETWORK=""
 STATE_EXTERNAL_PORT=""
+STATE_SHORTIDS=""
 
 LEGACY_INFO_FILE=""
 LEGACY_UUID=""
@@ -21,18 +24,19 @@ LEGACY_PRIVATEKEY=""
 LEGACY_PUBLICKEY=""
 LEGACY_NETWORK=""
 LEGACY_EXTERNAL_PORT=""
+LEGACY_SHORTIDS=""
 
 load_state() {
   if [ ! -f "$STATE_FILE" ]; then
     return
   fi
 
-  STATE_VALUES=$(jq -r '[.uuid // "", .private_key // "", .public_key // "", .dest // "", (.servernames // []) | join(" "), .network // "", .external_port // ""] | @tsv' "$STATE_FILE" 2>/dev/null)
+  STATE_VALUES=$(jq -r '[.uuid // "", .private_key // "", .public_key // "", .dest // "", (.servernames // []) | join(" "), .network // "", .external_port // "", (.short_ids // []) | join(" ")] | @tsv' "$STATE_FILE" 2>/dev/null)
   if [ -z "$STATE_VALUES" ]; then
     return
   fi
 
-  IFS="$(printf '\t')" read -r STATE_UUID STATE_PRIVATEKEY STATE_PUBLICKEY STATE_DEST STATE_SERVERNAMES STATE_NETWORK STATE_EXTERNAL_PORT <<EOF_STATE
+  IFS="$(printf '\t')" read -r STATE_UUID STATE_PRIVATEKEY STATE_PUBLICKEY STATE_DEST STATE_SERVERNAMES STATE_NETWORK STATE_EXTERNAL_PORT STATE_SHORTIDS <<EOF_STATE
 $STATE_VALUES
 EOF_STATE
 }
@@ -56,6 +60,7 @@ load_legacy() {
     LEGACY_PUBLICKEY=$(sed -n 's/^PUBLICKEY\/PASSWORD: //p' "$LEGACY_INFO_FILE")
     LEGACY_NETWORK=$(sed -n 's/^NETWORK: //p' "$LEGACY_INFO_FILE")
     LEGACY_EXTERNAL_PORT=$(sed -n 's/^PORT: //p' "$LEGACY_INFO_FILE")
+    LEGACY_SHORTIDS=$(sed -n 's/^SHORT_IDS: //p' "$LEGACY_INFO_FILE")
   fi
 }
 
@@ -75,6 +80,12 @@ LEGACY_PUBLICKEY="$(filter_masked "$LEGACY_PUBLICKEY")"
 
 if [ -n "$LEGACY_SERVERNAMES" ]; then
   LEGACY_SERVERNAMES="$(echo "$LEGACY_SERVERNAMES" | awk '{$1=$1;print}')"
+fi
+if [ -n "$LEGACY_SHORTIDS" ]; then
+  LEGACY_SHORTIDS="$(echo "$LEGACY_SHORTIDS" | awk '{$1=$1;print}')"
+fi
+if [ -z "$SHORT_IDS" ] && [ -n "$SHORTIDS" ]; then
+  SHORT_IDS="$SHORTIDS"
 fi
 
 IPV6=$(curl -6 -sSL --connect-timeout 3 --retry 2 ip.sb || echo "null")
@@ -124,7 +135,9 @@ fi
 
 if [ -n "$HOSTMODE_PORT" ]; then
   EXTERNAL_PORT=$HOSTMODE_PORT
-  jq ".inbounds[0].port=$HOSTMODE_PORT" /config.json > /config.json_tmp && mv /config.json_tmp /config.json
+  if [ "$SNI_FILTER" != "true" ]; then
+    jq ".inbounds[0].port=$HOSTMODE_PORT" /config.json > /config.json_tmp && mv /config.json_tmp /config.json
+  fi
 fi
 
 DEST_FROM_ENV=false
@@ -165,6 +178,19 @@ fi
 if [ -z "$SERVERNAMES" ]; then
   echo "SERVERNAMES is not set. use default value [\"www.apple.com\",\"images.apple.com\"]"
   SERVERNAMES="www.apple.com images.apple.com"
+fi
+
+if [ -z "$SHORT_IDS" ]; then
+  if [ -n "$STATE_SHORTIDS" ]; then
+    SHORT_IDS="$STATE_SHORTIDS"
+  elif [ -n "$LEGACY_SHORTIDS" ]; then
+    SHORT_IDS="$LEGACY_SHORTIDS"
+  fi
+fi
+
+if [ -z "$SHORT_IDS" ]; then
+  SHORT_IDS="$(/xray uuid | tr -d '-' | cut -c 1-16)"
+  echo "SHORT_IDS is not set, generate random short ID: $SHORT_IDS"
 fi
 
 if [ -z "$PRIVATEKEY" ]; then
@@ -209,6 +235,13 @@ if [ -z "$NETWORK" ]; then
 fi
 
 SERVERNAMES_JSON_ARRAY="$(echo "[$(echo $SERVERNAMES | awk '{for(i=1;i<=NF;i++) printf "\"%s\",", $i}' | sed 's/,$//')]")"
+SHORT_IDS_JSON_ARRAY="$(echo "[$(echo $SHORT_IDS | awk '{for(i=1;i<=NF;i++) printf "\"%s\",", $i}' | sed 's/,$//')]")"
+
+if [ "$SNI_FILTER" = "true" ]; then
+  jq ".inbounds[0].listen=\"127.0.0.1\" | .inbounds[0].port=$SNI_FILTER_BACKEND_PORT" /config.json > /config.json_tmp && mv /config.json_tmp /config.json
+else
+  jq ".inbounds[0].listen=\"0.0.0.0\"" /config.json > /config.json_tmp && mv /config.json_tmp /config.json
+fi
 
 jq \
   --arg uuid "$UUID" \
@@ -216,9 +249,11 @@ jq \
   --arg private_key "$PRIVATEKEY" \
   --arg network "$NETWORK" \
   --argjson serverNames "$SERVERNAMES_JSON_ARRAY" \
+  --argjson shortIds "$SHORT_IDS_JSON_ARRAY" \
   '.inbounds[1].settings.clients[0].id = $uuid
   | .inbounds[1].streamSettings.realitySettings.dest = $dest
   | .inbounds[1].streamSettings.realitySettings.serverNames = $serverNames
+  | .inbounds[1].streamSettings.realitySettings.shortIds = $shortIds
   | .routing.rules[0].domain = $serverNames
   | .inbounds[1].streamSettings.realitySettings.privateKey = $private_key
   | .inbounds[1].streamSettings.network = $network' /config.json > /config.json_tmp && mv /config.json_tmp /config.json
@@ -231,7 +266,8 @@ jq -n \
   --arg network "$NETWORK" \
   --arg external_port "$EXTERNAL_PORT" \
   --argjson servernames "$SERVERNAMES_JSON_ARRAY" \
-  '{uuid:$uuid, private_key:$private_key, public_key:$public_key, dest:$dest, servernames:$servernames, network:$network, external_port:$external_port}' > "$STATE_FILE"
+  --argjson short_ids "$SHORT_IDS_JSON_ARRAY" \
+  '{uuid:$uuid, private_key:$private_key, public_key:$public_key, dest:$dest, servernames:$servernames, network:$network, external_port:$external_port, short_ids:$short_ids}' > "$STATE_FILE"
 
 FIRST_SERVERNAME=$(echo $SERVERNAMES | awk '{print $1}')
 
@@ -256,6 +292,9 @@ echo "SERVERNAMES: $SERVERNAMES (任选其一)" >> /config_info.txt
 echo "PRIVATEKEY: $DISPLAY_PRIVATEKEY" >> /config_info.txt
 echo "PUBLICKEY/PASSWORD: $DISPLAY_PUBLICKEY" >> /config_info.txt
 echo "NETWORK: $NETWORK" >> /config_info.txt
+echo "SHORT_IDS: $SHORT_IDS" >> /config_info.txt
+echo "SNI_FILTER: $SNI_FILTER" >> /config_info.txt
+echo "SNI_FILTER_BACKEND_PORT: $SNI_FILTER_BACKEND_PORT" >> /config_info.txt
 if [ "$IPV4" != "null" ]; then
   SUB_IPV4="vless://$UUID@$IPV4:$EXTERNAL_PORT?encryption=none&security=reality&type=$NETWORK&sni=$FIRST_SERVERNAME&fp=firefox&pbk=$PUBLICKEY&flow=xtls-rprx-vision#${IPV4}-wulabing_docker_vless_reality_vision"
   echo "IPV4 订阅连接: $SUB_IPV4" >> /config_info.txt
@@ -273,6 +312,15 @@ cp -f /config_info.txt "$INFO_FILE"
 
 # show config info
 cat /config_info.txt
+
+# run sni-filter if enabled
+if [ "$SNI_FILTER" = "true" ]; then
+  if [ ! -x /usr/bin/sni-filter ]; then
+    echo "Error: sni-filter binary not found"
+    exit 1
+  fi
+  /usr/bin/sni-filter -L=tcp://0.0.0.0:$EXTERNAL_PORT -F=tcp://127.0.0.1:$SNI_FILTER_BACKEND_PORT -S=$FIRST_SERVERNAME &
+fi
 
 # run xray
 exec /xray -config /config.json

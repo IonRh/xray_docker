@@ -13,6 +13,7 @@ STATE_SERVERNAMES=""
 STATE_NETWORK=""
 STATE_EXTERNAL_PORT=""
 STATE_XHTTP_PATH=""
+STATE_SHORTIDS=""
 
 LEGACY_INFO_FILE=""
 LEGACY_UUID=""
@@ -23,18 +24,19 @@ LEGACY_PUBLICKEY=""
 LEGACY_NETWORK=""
 LEGACY_EXTERNAL_PORT=""
 LEGACY_XHTTP_PATH=""
+LEGACY_SHORTIDS=""
 
 load_state() {
   if [ ! -f "$STATE_FILE" ]; then
     return
   fi
 
-  STATE_VALUES=$(jq -r '[.uuid // "", .private_key // "", .public_key // "", .dest // "", (.servernames // []) | join(" "), .network // "", .external_port // "", .xhttp_path // ""] | @tsv' "$STATE_FILE" 2>/dev/null)
+  STATE_VALUES=$(jq -r '[.uuid // "", .private_key // "", .public_key // "", .dest // "", (.servernames // []) | join(" "), .network // "", .external_port // "", .xhttp_path // "", (.short_ids // []) | join(" ")] | @tsv' "$STATE_FILE" 2>/dev/null)
   if [ -z "$STATE_VALUES" ]; then
     return
   fi
 
-  IFS="$(printf '\t')" read -r STATE_UUID STATE_PRIVATEKEY STATE_PUBLICKEY STATE_DEST STATE_SERVERNAMES STATE_NETWORK STATE_EXTERNAL_PORT STATE_XHTTP_PATH <<EOF_STATE
+  IFS="$(printf '\t')" read -r STATE_UUID STATE_PRIVATEKEY STATE_PUBLICKEY STATE_DEST STATE_SERVERNAMES STATE_NETWORK STATE_EXTERNAL_PORT STATE_XHTTP_PATH STATE_SHORTIDS <<EOF_STATE
 $STATE_VALUES
 EOF_STATE
 }
@@ -59,6 +61,7 @@ load_legacy() {
     LEGACY_NETWORK=$(sed -n 's/^NETWORK: //p' "$LEGACY_INFO_FILE")
     LEGACY_EXTERNAL_PORT=$(sed -n 's/^PORT: //p' "$LEGACY_INFO_FILE")
     LEGACY_XHTTP_PATH=$(sed -n 's/^XHTTP_PATH: //p' "$LEGACY_INFO_FILE")
+    LEGACY_SHORTIDS=$(sed -n 's/^SHORT_IDS: //p' "$LEGACY_INFO_FILE")
   fi
 }
 
@@ -78,6 +81,12 @@ LEGACY_PUBLICKEY="$(filter_masked "$LEGACY_PUBLICKEY")"
 
 if [ -n "$LEGACY_SERVERNAMES" ]; then
   LEGACY_SERVERNAMES="$(echo "$LEGACY_SERVERNAMES" | awk '{$1=$1;print}')"
+fi
+if [ -n "$LEGACY_SHORTIDS" ]; then
+  LEGACY_SHORTIDS="$(echo "$LEGACY_SHORTIDS" | awk '{$1=$1;print}')"
+fi
+if [ -z "$SHORT_IDS" ] && [ -n "$SHORTIDS" ]; then
+  SHORT_IDS="$SHORTIDS"
 fi
 
 IPV6=$(curl -6 -sSL --connect-timeout 3 --retry 2 ip.sb || echo "null")
@@ -185,6 +194,19 @@ if [ -z "$SERVERNAMES" ]; then
   SERVERNAMES="www.apple.com images.apple.com"
 fi
 
+if [ -z "$SHORT_IDS" ]; then
+  if [ -n "$STATE_SHORTIDS" ]; then
+    SHORT_IDS="$STATE_SHORTIDS"
+  elif [ -n "$LEGACY_SHORTIDS" ]; then
+    SHORT_IDS="$LEGACY_SHORTIDS"
+  fi
+fi
+
+if [ -z "$SHORT_IDS" ]; then
+  SHORT_IDS="$(/xray uuid | tr -d '-' | cut -c 1-16)"
+  echo "SHORT_IDS is not set, generate random short ID: $SHORT_IDS"
+fi
+
 if [ -z "$PRIVATEKEY" ]; then
   if [ -n "$STATE_PRIVATEKEY" ]; then
     PRIVATEKEY="$STATE_PRIVATEKEY"
@@ -227,6 +249,7 @@ if [ -z "$NETWORK" ]; then
 fi
 
 SERVERNAMES_JSON_ARRAY="$(echo "[$(echo $SERVERNAMES | awk '{for(i=1;i<=NF;i++) printf "\"%s\",", $i}' | sed 's/,$//')]")"
+SHORT_IDS_JSON_ARRAY="$(echo "[$(echo $SHORT_IDS | awk '{for(i=1;i<=NF;i++) printf "\"%s\",", $i}' | sed 's/,$//')]")"
 
 jq \
   --arg uuid "$UUID" \
@@ -235,12 +258,15 @@ jq \
   --arg private_key "$PRIVATEKEY" \
   --arg network "$NETWORK" \
   --argjson serverNames "$SERVERNAMES_JSON_ARRAY" \
-  '.inbounds[1].settings.clients[0].id = $uuid
-  | .inbounds[1].streamSettings.realitySettings.dest = $dest
-  | .inbounds[1].streamSettings.xhttpSettings.path = $xhttp_path
-  | .inbounds[1].streamSettings.realitySettings.serverNames = $serverNames
-  | .inbounds[1].streamSettings.realitySettings.privateKey = $private_key
-  | .inbounds[1].streamSettings.network = $network' /config.json > /config.json_tmp && mv /config.json_tmp /config.json
+  --argjson shortIds "$SHORT_IDS_JSON_ARRAY" \
+  '.inbounds[2].settings.clients[0].id = $uuid
+  | .inbounds[2].streamSettings.realitySettings.dest = $dest
+  | .inbounds[2].streamSettings.xhttpSettings.path = $xhttp_path
+  | .inbounds[2].streamSettings.realitySettings.serverNames = $serverNames
+  | .inbounds[2].streamSettings.realitySettings.shortIds = $shortIds
+  | .routing.rules[0].domain = $serverNames
+  | .inbounds[2].streamSettings.realitySettings.privateKey = $private_key
+  | .inbounds[2].streamSettings.network = $network' /config.json > /config.json_tmp && mv /config.json_tmp /config.json
 
 jq -n \
   --arg uuid "$UUID" \
@@ -251,7 +277,8 @@ jq -n \
   --arg external_port "$EXTERNAL_PORT" \
   --arg xhttp_path "$XHTTP_PATH" \
   --argjson servernames "$SERVERNAMES_JSON_ARRAY" \
-  '{uuid:$uuid, private_key:$private_key, public_key:$public_key, dest:$dest, servernames:$servernames, network:$network, external_port:$external_port, xhttp_path:$xhttp_path}' > "$STATE_FILE"
+  --argjson short_ids "$SHORT_IDS_JSON_ARRAY" \
+  '{uuid:$uuid, private_key:$private_key, public_key:$public_key, dest:$dest, servernames:$servernames, network:$network, external_port:$external_port, xhttp_path:$xhttp_path, short_ids:$short_ids}' > "$STATE_FILE"
 
 FIRST_SERVERNAME=$(echo $SERVERNAMES | awk '{print $1}')
 
@@ -277,6 +304,7 @@ echo "PRIVATEKEY: $DISPLAY_PRIVATEKEY" >> /config_info.txt
 echo "PUBLICKEY/PASSWORD: $DISPLAY_PUBLICKEY" >> /config_info.txt
 echo "NETWORK: $NETWORK" >> /config_info.txt
 echo "XHTTP_PATH: $XHTTP_PATH" >> /config_info.txt
+echo "SHORT_IDS: $SHORT_IDS" >> /config_info.txt
 
 if [ "$IPV4" != "null" ]; then
   SUB_IPV4="vless://$UUID@$IPV4:$EXTERNAL_PORT?encryption=none&security=reality&type=$NETWORK&sni=$FIRST_SERVERNAME&fp=firefox&pbk=$PUBLICKEY&path=$XHTTP_PATH&mode=auto#${IPV4}-wulabing_docker_xhttp_reality"

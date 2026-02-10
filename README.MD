@@ -65,7 +65,7 @@ docker run -d \
   -e SNI_FILTER="true" \
   -e SHORT_IDS="6e a93c f1" \
   -v "/root/reality:/data" \
-  wulabing/xray_docker_reality:latest
+  kwxos/xray_docker_reality:latest
 ```
 
 ## 环境变量
